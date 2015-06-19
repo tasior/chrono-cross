@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script type="text/javascript" src="build/vendor/jdataview.js"></script>
+        <script type="text/javascript" src="build/vendor/jparser.js"></script>
+        <script type="text/javascript" src="build/vendor/three/three.js"></script>
+        <script type="text/javascript" src="build/vendor/three/OrbitControls.js"></script>
+        <script type="text/javascript" src="build/core.js"></script>
+        <script type="text/javascript" src="build/cc.js"></script>
+        <script type="text/javascript" src="build/vram.js"></script>
+        <script type="text/javascript" src="src/three/CCBattlefield.js"></script>
+        <style>
+			html, body { 
+			    margin: 0; 
+			    padding: 0;
+			    width: 100%;
+			    height: 100%;
+			}
+			.buttons {
+			    position: absolute;
+			}
+		</style>
+    </head>
+    <body>
+        <div class="buttons">
+            <button id="open">Select file</button>
+            <!--<button id="blend" onclick="blending++; changeBlend();">blend</button>-->
+            <!--<button id="src" onclick="blendSrc++; changeBlend();">src</button>-->
+            <!--<button id="dst" onclick="blendDst++; changeBlend();">dst</button>-->
+            <!--<button id="eq" onclick="blendEquation++; changeBlend();">eq</button>-->
+            <!--<button id="depthTest" onclick="depthTest = !depthTest; changeBlend();">depthTest</button>-->
+            <!--<button id="depthWrite" onclick="depthWrite = !depthWrite; changeBlend();">depthWrite</button>-->
+        </div>
+        <script type="text/javascript">
+            /* global THREE */
+            /* global Core */
+            /* global CC */
+            /* global VRAM */
+            
+            var vram = new VRAM(),
+                // w = 640, h = 480,
+                w = window.innerWidth, h = window.innerHeight,
+                scene = new THREE.Scene(), 
+                camera = new THREE.PerspectiveCamera( 75, w/h, 0.1, 1000 ),
+                renderer = new THREE.WebGLRenderer(),
+                controls = new THREE.OrbitControls( camera, renderer.domElement ),
+                btl; 
+            
+            renderer.sortObjects = false;
+            renderer.setSize( w, h ); 
+            // renderer.setClearColor( 0xff0000 );
+            document.body.appendChild( renderer.domElement ); 
+            
+            // camera.position.x = 29.7284;
+            // camera.position.y = 16.7577;
+            // camera.position.z = 135.5286;
+            //lizard
+            camera.position.x = 269.06681881557654;
+            camera.position.y = 24.46792632264594;
+            camera.position.z = 45.6335152897888;
+            
+            
+            var ambientLight = new THREE.AmbientLight( 0xff0000 );
+	        this.scene.add( ambientLight );
+	        var lights = [];
+			lights[0] = new THREE.PointLight( 0xffffff, 0.5, 0 );
+			lights[1] = new THREE.PointLight( 0xffffff, 0.5, 0 );
+			
+			lights[0].position.set( 0, 40, 0 );
+			lights[1].position.set( 10, 40, -10 );
+
+			this.scene.add( lights[0] );
+			this.scene.add( lights[1] );
+            
+            var render = function () { 
+                requestAnimationFrame( render ); 
+                
+                renderer.render(scene, camera); 
+            }; 
+            render();
+            
+            var battlefield;
+            document.querySelector('#open').addEventListener('click', function () {
+                new Core.FileDialog().open(function (file) {
+                    new Core.BinaryFileReader(file).read(0, file.size, function (buffer) {
+                        battlefield = new CC.Battlefield( new CC.DrpReader(buffer) );
+                        
+                        scene.add( (btl=new THREE.CCBattlefield(battlefield, vram)) );
+                        console.log('done');
+                        changeBlend();
+                    });
+                });
+            });
+            
+            window.addEventListener('resize', function () {
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                
+                this.renderer.setSize( window.innerWidth, window.innerHeight ); 
+            });
+            
+            var blendings = ['NoBlending', 'NormalBlending', 'AdditiveBlending', 'SubtractiveBlending', 'MultiplyBlending', 'CustomBlending'];
+            // var blendings = [ "NoBlending", "NormalBlending", "AdditiveBlending", "SubtractiveBlending", "MultiplyBlending", "AdditiveAlphaBlending" ];
+            var src = [ "ZeroFactor", "OneFactor", "SrcAlphaFactor", "OneMinusSrcAlphaFactor", "DstAlphaFactor", "OneMinusDstAlphaFactor", "DstColorFactor", "OneMinusDstColorFactor", "SrcAlphaSaturateFactor" ];
+    		var dst = [ "ZeroFactor", "OneFactor", "SrcColorFactor", "OneMinusSrcColorFactor", "SrcAlphaFactor", "OneMinusSrcAlphaFactor", "DstAlphaFactor", "OneMinusDstAlphaFactor" ];
+            var equations = [ "AddEquation", "SubtractEquation", "ReverseSubtractEquation", "MinEquation", "MaxEquation" ];
+            
+            var blending = 0,
+                blendSrc = 0,
+                blendDst = 0,
+                blendEquation = 0,
+                depthTest = true,
+                depthWrite = true;
+            
+            function changeBlend() {
+                btl.textures.filter(function(e) { return e.abr; }).forEach(function (m) {
+                    m.blending = THREE[ blendings[ blending % blendings.length ] ];
+        			m.blendSrc = THREE[ src[ blendSrc % src.length ] ];
+        			m.blendDst = THREE[ dst[ blendDst % dst.length ] ];
+        			m.blendEquation = THREE[ equations[ blendEquation % equations.length ] ];
+                });
+                btl.textures.forEach(function (m) {
+                    m.depthTest = depthTest;
+                    m.depthWrite = depthWrite;
+                });
+                
+                document.querySelector('#blend').innerHTML = blendings[ blending % blendings.length ];
+                document.querySelector('#src').innerHTML = src[ blendSrc % src.length ];
+                document.querySelector('#dst').innerHTML = dst[ blendDst % dst.length ];
+                document.querySelector('#eq').innerHTML = equations[ blendEquation % equations.length];
+                document.querySelector('#depthTest').innerHTML = 'depthTest: ' + depthTest;
+                document.querySelector('#depthWrite').innerHTML = 'depthWrite: ' + depthWrite;
+            }
+            
+            
+        </script>
+    </body>
+</html>

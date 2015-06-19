@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script type="text/javascript" src="build/vendor/jdataview.js"></script>
+        <script type="text/javascript" src="build/vendor/jparser.js"></script>
+        <script type="text/javascript" src="build/vendor/three/three.min.js"></script>
+        <script type="text/javascript" src="build/vendor/three/OrbitControls.js"></script>
+        <script type="text/javascript" src="build/core.js"></script>
+        <script type="text/javascript" src="build/cc.js"></script>
+        <script type="text/javascript" src="build/vram.js"></script>
+        <style>
+			html, body { 
+			    margin: 0; 
+			    padding: 0;
+			    width: 100%;
+			    height: 100%;
+			}
+			/*canvas { width: 100%; height: 100% }*/
+			#open {
+			    position: fixed;
+			}
+		</style>
+    </head>
+    <body>
+        <button id="open">Click</button>
+        <script type="text/javascript">
+            var Core, CC, THREE, VRAM;
+            
+            var reader, drp, meshes= [],
+                scene,
+                vram = new VRAM(),
+                BinaryReader = Core.BinaryReader,
+                textures = {},
+                texturesIdx = [],
+                normal = new THREE.Vector3( 0, 1, 0 ),
+                color = new THREE.Color( 0xffaa00 );
+                
+            function createTexture(tp, clut) {
+                var data = new Uint8Array( 4 * 256 * 256 );
+                var material = vram.loadImage2(tp, clut);
+    
+                var color, r, g, b, a;
+                for(var i = 0; i < material.data.length; i++) {
+                    color = material.data[i],
+                    r = ((color&0x001f)<<3)|((color&0x001c)>>2),
+            		g = ((color&0x03e0)>>2)|((color&0x0380)>>7),
+            		b = ((color&0x7c00)>>7)|((color&0x7000)>>12),
+            		a = (((color&0x8000) >> 7)) ? 255 : (r != 0 || g != 0 || b != 0)? 128 : 0;
+            		
+                    data[ i * 4 ] = r;
+                    data[ i * 4 + 1 ] = g;
+                    data[ i * 4 + 2 ] = b;
+                    data[ i * 4 + 3 ] = a;
+                }
+                //  THREE.DataTexture = function   ( data, width,      height,     format, type, mapping, wrapS, wrapT, magFilter, minFilter, anisotropy );
+                var texture = new THREE.DataTexture( 
+                                    /*data*/ data, 
+                                    /*width*/material.w, 
+                                    /*height*/material.h, 
+                                    /*format*/THREE.RGBAFormat, 
+                                    /*type*/ undefined, 
+                                    /*mapping*/ undefined, 
+                                    /*wrapS*/ undefined, 
+                                    /*wrapT*/ undefined, 
+                                    /*magFilter*/ THREE.NearestFilter, 
+                                    /*minFilter*/ THREE.NearestFilter, 
+                                    /*anisotropy*/ undefined
+                            );
+                    texture.needsUpdate = true;
+                    
+                
+                return texture;
+            }
+                
+            document.querySelector('#open').addEventListener('click', function () {
+                new Core.FileDialog().open(function (file) {
+                    
+                    new Core.BinaryFileReader(file).read(0, file.size, function (buffer) {
+                        reader = new CC.DrpReader(buffer);
+                        
+                        drp = reader.read();
+                        
+                        drp.entries.filter(function(e){ return e.type == 0x04; }).forEach(function(e) {
+                            var tim = reader.file(e.offset, e.length);
+                            
+                            vram.readTIM(tim);
+                            
+                        });
+                        
+                        (function () {
+                            
+                    		var canvas = document.createElement('canvas');
+                    		    canvas.width = 1024;
+                    		    canvas.height = 512;
+                    		var ctx = canvas.getContext("2d");
+                    		var idata = ctx.getImageData(0, 0, 1024, 512);
+            
+                            var color, index;
+                            
+                            for (var i = 524288 ; i--; ) {
+                                color = vram.data[i];//vram.toRgba( vram.data[i] );
+                                index = i * 4;
+                                
+                                idata.data[index] = ((color&0x001f)<<3)|((color&0x001c)>>2);
+                                idata.data[index + 1] = ((color&0x03e0)>>2)|((color&0x0380)>>7);
+                                idata.data[index + 2] = ((color&0x7c00)>>7)|((color&0x7000)>>12);
+                                idata.data[index + 3] = 255;//color.a;
+                            }
+                            
+                            ctx.putImageData(idata, 0, 0);
+                    		
+                    		document.body.appendChild(canvas);
+                        })();
+                        
+                        drp.entries.filter(function(e){ return e.type == 0x02; }).forEach(function(e) {
+                            var f = reader.file(e.offset, e.length);
+                            meshes.push( new CC.MeshReader(f).read() );
+                        });
+                        
+                        meshes.forEach(function(m, i) {
+                        // var m = meshes[1];
+                            var geometry = new THREE.Geometry();
+                            
+                            m.vertices.forEach(function(v){
+                                geometry.vertices.push( new THREE.Vector3(v.x / 100, -v.y / 100, v.z / 100) );
+                            });
+                            
+                            m.faces.forEach(function (f) {
+                                var face;
+                                var textureIndex = 0;
+                                
+                                if(f.tpage && f.clut) {
+                                    var tid = f.tpage + '_' + f.clut;
+                                    if(!textures[tid]) {
+                                        var canv = document.createElement('canvas');
+                                        canv.width = 256;
+                                        canv.height = 256;
+                                        var ctx = canv.getContext('2d');
+                                            
+                                        ctx.putImageData(vram.loadImageData2(f.tpage, f.clut), 0, 0);
+                                        ctx.fillStyle = "red";
+                                        ctx.font = "15px Arial";
+                                        ctx.fillText("0x" + f.type.toString(16),10,30);
+                                        ctx.fillText("tp: " + f.tpage.toString(),10,50);
+                                        ctx.fillText("cl: " + f.clut.toString(),10,70);
+    
+                                        document.body.appendChild(canv);
+                                        
+                                        textures[tid] = createTexture(f.tpage, f.clut);
+                                        texturesIdx.push(tid);
+                                    }
+                                    textureIndex = texturesIdx.indexOf(tid);
+                                }
+                                
+                                switch (f.type) {
+                                    case 0x34:
+                                    case 0x24:
+                                    case 0x20:
+                                    case 0x30:
+                                        face = new THREE.Face3(f.indices[0], f.indices[1], f.indices[2]);//, normal, color, textureIndex);
+                                        geometry.faces.push(face);
+                                        break;
+                                    case 0x3c:
+                                    case 0x2c:
+                                    case 0x28:
+                                    case 0x38:
+                                        face = new THREE.Face3(f.indices[0], f.indices[1], f.indices[2]);//, normal, color, textureIndex);
+                                        geometry.faces.push(face);
+                                        face = new THREE.Face3(f.indices[3], f.indices[2], f.indices[1]);//, normal, color, textureIndex);
+                                        geometry.faces.push(face);
+                                        break;
+                                    
+                                }
+                                
+                            });
+                            
+                            geometry.computeFaceNormals();
+                            geometry.computeVertexNormals();
+                            
+                            scene.add( new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({color: 0xababab, side: THREE.DoubleSide})) );
+                        });
+                    });
+                    
+                });
+            });
+            
+            /* global THREE */
+            scene = new THREE.Scene();
+            var w = 640, h = 480;
+			var camera = new THREE.PerspectiveCamera( 75, w/h, 0.1, 1000 );
+
+
+			var renderer = new THREE.WebGLRenderer();
+			renderer.setSize( w, h );
+			document.body.appendChild( renderer.domElement );
+
+            var controls = new THREE.OrbitControls( camera, renderer.domElement );
+            
+			var geometry = new THREE.BoxGeometry( 1, 1, 1 );
+			var material = new THREE.MeshLambertMaterial({color: 0xababab, side: THREE.DoubleSide}); 
+			//new THREE.MeshBasicMaterial( { color: 0x00ff00 } );
+			var cube = new THREE.Mesh( geometry, material );
+			scene.add( cube );
+			
+			var ambientLight = new THREE.AmbientLight( 0xff0000 );
+	        this.scene.add( ambientLight );
+			
+			var lights = [];
+			lights[0] = new THREE.PointLight( 0xffffff, 0.5, 0 );
+			lights[1] = new THREE.PointLight( 0xffffff, 0.5, 0 );
+			
+			lights[0].position.set( 0, 40, 0 );
+			lights[1].position.set( 10, 40, -10 );
+
+			this.scene.add( lights[0] );
+			this.scene.add( lights[1] );
+
+			camera.position.z = 5;
+
+			var render = function () {
+				requestAnimationFrame( render );
+
+
+				renderer.render(scene, camera);
+			};
+
+			render();
+        </script>
+    </body>
+</html>

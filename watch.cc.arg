@@ -1,0 +1,1 @@
+--out build/cc.js src/lib/CC/CC.ts -w

@@ -1,0 +1,1 @@
+--out build/core.js src/lib/Core/Core.ts -w
