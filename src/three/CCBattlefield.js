@@ -9,20 +9,17 @@ THREE.CCBattlefield = function ( battlefield, vram ) {
     this.textures = [];
     this.texturesIds = {};
     this.materials = [];
-    console.log('------');
+    
     for(var m in this.battlefield.mesh) {
-        console.log(m);
         var ccMesh = this.battlefield.mesh[m];
-        
-        this.add( this._createMesh(ccMesh) );
+        this.add( this._createMesh(ccMesh, m) );
     }
-    console.log(this);
 };
 
 THREE.CCBattlefield.prototype = Object.create( THREE.Group.prototype );
 THREE.CCBattlefield.prototype.constructor = THREE.CCBattlefield;
 
-THREE.CCBattlefield.prototype._createMesh = function (ccMesh) {
+THREE.CCBattlefield.prototype._createMesh = function (ccMesh, name) {
     var geometry = new THREE.Geometry();
     var self = this;
     var materials = [];
@@ -50,9 +47,9 @@ THREE.CCBattlefield.prototype._createMesh = function (ccMesh) {
                 var color = new THREE.Color( f.rgb[0], f.rgb[1], f.rgb[2] );
                 geometry.faces.push( new THREE.Face3( f.indices[0], f.indices[1], f.indices[2], undefined, color, textureIndex ) );
                 geometry.faceVertexUvs[ 0 ].push([
+                    new THREE.Vector2( f.uv3[0] / 256, (256 - f.uv3[1]) / 256 ),
                     new THREE.Vector2( f.uv1[0] / 256, (256 - f.uv1[1]) / 256 ),
                     new THREE.Vector2( f.uv2[0] / 256, (256 - f.uv2[1]) / 256 ),
-                    new THREE.Vector2( f.uv3[0] / 256, (256 - f.uv3[1]) / 256 )
                 ]);
                 break;
             // #define GPU_COM_G3    0x30
@@ -180,6 +177,7 @@ THREE.CCBattlefield.prototype._createMesh = function (ccMesh) {
     // var mesh = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: 0xffff00, side: THREE.DoubleSide } ) );
     // var mesh = new THREE.Mesh( geometry, new THREE.MeshLambertMaterial({color: 0xababab, side: THREE.DoubleSide}) );
     var mesh = new THREE.Mesh( geometry, new THREE.MeshFaceMaterial( this.textures ) );
+    mesh.name = name;
     
     return mesh;
 };
@@ -203,11 +201,12 @@ THREE.CCBattlefield.prototype._getMaterialIndex = function (tpage, clut) {
 		var dst = [ "ZeroFactor", "OneFactor", "SrcColorFactor", "OneMinusSrcColorFactor", "SrcAlphaFactor", "OneMinusSrcAlphaFactor", "DstAlphaFactor", "OneMinusDstAlphaFactor" ];
         
         if((((tpage)>>5)&0x003)) {
+            console.log((((tpage)>>5)&0x003));
             material.abr = 1;
-            material.blending = THREE[ 'CustomBlending' ];
-			material.blendSrc = THREE[ 'ZeroFactor' ];
-			material.blendDst = THREE[ 'ZeroFactor' ];
-			material.blendEquation = THREE.AddEquation;
+//             material.blending = THREE[ 'CustomBlending' ];
+// 			material.blendSrc = THREE[ 'DstColorFactor' ];
+// 			material.blendDst = THREE[ 'OneFactor' ];
+// 			material.blendEquation = THREE.AddEquation;
         } else {
             material.abr = 0;
             material.transparent = false;

@@ -36,8 +36,13 @@ module CC {
                 mesh = {};
             
             drp.entries.filter((e) => { return e.type == 0x02 || e.type == 0x12; }).forEach((entry) => {
-                console.log(entry.name);
-                mesh[entry.name] =  new MeshReader( this._reader.file(entry.offset, entry.length) ).read();
+                console.log(entry);
+                var name = entry.name;
+                if(mesh[entry.name]) {
+                    console.warn('exist', entry.name);
+                    name += Date.now();
+                }
+                mesh[name] =  new MeshReader( this._reader.file(entry.offset, entry.length) ).read();
             });
             
             return mesh;

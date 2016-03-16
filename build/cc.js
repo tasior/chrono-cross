@@ -242,8 +242,13 @@ var CC;
             var _this = this;
             var drp = this._reader.read(), mesh = {};
             drp.entries.filter(function (e) { return e.type == 0x02 || e.type == 0x12; }).forEach(function (entry) {
-                console.log(entry.name);
-                mesh[entry.name] = new CC.MeshReader(_this._reader.file(entry.offset, entry.length)).read();
+                console.log(entry);
+                var name = entry.name;
+                if (mesh[entry.name]) {
+                    console.warn('exist', entry.name);
+                    name += Date.now();
+                }
+                mesh[name] = new CC.MeshReader(_this._reader.file(entry.offset, entry.length)).read();
             });
             return mesh;
         };
